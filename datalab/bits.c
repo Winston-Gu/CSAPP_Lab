@@ -143,7 +143,7 @@ NOTES:
  *   Rating: 1
  */
 int bitXor(int x, int y) {
-  return 2;
+  return ~(~(x & ~y) & ~(~x & y));
 }
 /* 
  * tmin - return minimum two's complement integer 
@@ -153,7 +153,7 @@ int bitXor(int x, int y) {
  */
 int tmin(void) {
 
-  return 2;
+  return 1 << 31;
 
 }
 //2
@@ -165,7 +165,7 @@ int tmin(void) {
  *   Rating: 1
  */
 int isTmax(int x) {
-  return 2;
+  return ( !(~(x + 1) ^ x) & !!(x + 1));
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -176,7 +176,9 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
-  return 2;
+  int a = 0xAA << 8 | 0xAA;
+  int b = a << 16 | a;
+  return !((x & b) ^ b);
 }
 /* 
  * negate - return -x 
@@ -186,7 +188,7 @@ int allOddBits(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-  return 2;
+  return ~x+1;
 }
 //3
 /* 
@@ -199,7 +201,12 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+    int a = !(x >> 4 ^ 0x03);
+    int b = x & 0x0F;
+    int c = ~0xA+1;
+    int d = !!((b + c) >> 31);
+
+    return (a & d);
 }
 /* 
  * conditional - same as x ? y : z 
@@ -209,7 +216,10 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+    int sign = !!(x ^ 0x00);
+    int filter = ~sign + 1;
+
+    return (y & filter) | (z & ~filter);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -219,7 +229,16 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+    int nx = ~x + 1;
+    int a = y + nx;
+
+    int sx = x >> 31;
+    int sy = y >> 31;
+    int xpyn = ~sx & sy;// if x is positive and y is negative, xpyn is 0xFFFFFFFF, else xpyn is 0x00000000
+    int xnyp = sx & ~sy;// if x is negative and y is positive, xnyp is 0xFFFFFFFF, else xnyp is 0x00000000
+
+    int isxmin = !(x ^ nx) & !!(x ^ 0x00);
+    return isxmin | !!(xnyp) | (!(a >> 31) & !(xpyn));
 }
 //4
 /* 
@@ -231,7 +250,7 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return 2;
+    return ((x | ~x + 1) >> 31) + 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -246,7 +265,29 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  return 0;
+    int b16, b8, b4, b2, b1, b0, sign;
+    sign = x >> 31;
+
+    x = (~sign & x) | (sign & ~x );
+    
+    b16 = !!(x >> 16) << 4;
+    x = x >> b16;
+
+    b8 = !!(x >> 8) << 3;
+    x = x >> b8;
+
+    b4 = !!(x >> 4) << 2;
+    x = x >> b4;
+
+    b2 = !!(x >> 2) << 1;
+    x = x >> b2;
+
+    b1 = !!(x >> 1);
+    x = x >> b1;
+
+    b0 = !!(x);
+
+    return b16 + b8 + b4 + b2 + b1 + b0 + 1;
 }
 //float
 /* 
@@ -261,7 +302,20 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  return 2;
+    int fracmask = 0x007FFFFF;
+    int expmask = 0x7F800000;
+    int sign = uf >> 31;
+
+    int exp = (uf & expmask) >> 23;
+    if(exp == 0xFF)
+        return uf;
+    else if(exp == 0)
+        return ((uf & fracmask)) << 1 | (sign << 31);
+    else if (exp == 0xFE)
+        return 0x7F800000 | sign << 31;
+    else
+        return (exp + 1) << 23 | (uf & fracmask)| sign << 31;
+    
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -276,7 +330,23 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+    int fracmask = 0x007FFFFF;
+    int expmask = 0x7F800000;
+    int sign = uf >> 31;
+
+    int exp = ((uf & expmask) >> 23) - 127;
+    int frac = uf & fracmask | 0x00800000;
+    if(exp < 0)
+        return 0x0;
+    else if(exp > 31)
+        return 0x80000000u;
+    else if (exp < 23)
+        frac >>= (23 - exp);
+    else
+        frac <<= (exp - 23);
+    if(sign)
+        frac = ~frac + 1;
+    return frac;
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -292,5 +362,10 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+    int INF = 0xff<<23;
+    int exp = x + 127;
+    if(exp <= -23) return 0;
+    if(exp <= 0) return 1 << (exp + 23);
+    if(exp >= 255) return INF;
+    return exp << 23;
 }
